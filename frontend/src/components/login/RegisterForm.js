@@ -3,8 +3,18 @@
 import { Form, Formik } from 'formik';
 import React, { useState } from 'react';
 import RegisterInput from '../inputs/registerInput';
+import * as Yup from 'yup';
+import DateOfBirthSelect from '../login/DateOfBirthSelect';
+import GenderSelect from '../login/GenderSelect';
+import CircleLoader from 'react-spinners/CircleLoader';
+import axios from 'axios';
+import { useDispatch } from 'react-redux';
+import Cookies from 'js-cookie';
+import { useNavigate } from 'react-router-dom';
 
-const RegisterForm = () => {
+const RegisterForm = ({ setVisible }) => {
+	const dispatch = useDispatch();
+	const navigate = useNavigate();
 	const userInfos = {
 		first_name: '',
 		last_name: '',
@@ -27,26 +37,122 @@ const RegisterForm = () => {
 		gender,
 	} = user;
 	const yearTemp = new Date().getFullYear();
+
 	const handleRegisterChange = (e) => {
 		const { name, value } = e.target;
 		setUser({ ...user, [name]: value });
 	};
 	const years = Array.from(new Array(108), (val, index) => yearTemp - index);
-	const months = Array.from(new Array(12), (val, index) => bMonth + index);
+	const months = Array.from(new Array(12), (val, index) => 1 + index);
 	const getDays = () => {
 		return new Date(bYear, bMonth, 0).getDate();
 	};
-	const days = Array.from(new Array(getDays()), (val, index) => bDay + index);
+	const days = Array.from(new Array(getDays()), (val, index) => 1 + index);
+	const registerValidation = Yup.object({
+		first_name: Yup.string()
+			.required("What's your First name ?")
+			.min(2, 'Fisrt name must be between 2 and 16 characters.')
+			.max(16, 'Fisrt name must be between 2 and 16 characters.')
+			.matches(/^[aA-zZ]+$/, 'Numbers and special characters are not allowed.'),
+		last_name: Yup.string()
+			.required("What's your Last name ?")
+			.min(2, 'Last name must be between 2 and 16 characters.')
+			.max(16, 'Last name must be between 2 and 16 characters.')
+			.matches(/^[aA-zZ]+$/, 'Numbers and special characters are not allowed.'),
+		email: Yup.string()
+			.required(
+				"You'll need this when you log in and if you ever need to reset your password."
+			)
+			.email('Enter a valid email address.'),
+		password: Yup.string()
+			.required(
+				'Enter a combination of at least six numbers,letters and punctuation marks(such as ! and &).'
+			)
+			.min(6, 'Password must be atleast 6 characters.')
+			.max(36, "Password can't be more than 36 characters"),
+	});
+	const [dateError, setDateError] = useState('');
+	const [genderError, setGenderError] = useState('');
+	const [success, setSuccess] = useState('');
+	const [error, setError] = useState('');
+	const [loading, setLoading] = useState(false);
+
+	const registerSubmit = async () => {
+		try {
+			const { data } = await axios.post(
+				`${process.env.REACT_APP_BACKEND_URL}/register`,
+				{
+					first_name,
+					last_name,
+					email,
+					password,
+					bYear,
+					bMonth,
+					bDay,
+					gender,
+				}
+			);
+			setError('');
+			setSuccess(data.message);
+			const { message, ...rest } = data;
+			setTimeout(() => {
+				dispatch({ type: 'LOGIN', payload: rest });
+				Cookies.set('user', JSON.stringify(rest));
+				navigate('/');
+			}, 2000);
+		} catch (error) {
+			setLoading(false);
+			setSuccess('');
+			setError(error.response.data.message);
+		}
+	};
 
 	return (
 		<div className="blur">
 			<div className="register">
 				<div className="register_header">
-					<i className="exit_icon"></i>
-					<span>Sign up</span>
+					<i className="exit_icon" onClick={() => setVisible(false)}></i>
+					<span>Sign Up</span>
 					<span>it's quick and easy</span>
 				</div>
-				<Formik>
+				<Formik
+					enableReinitialize
+					initialValues={{
+						first_name,
+						last_name,
+						email,
+						password,
+						bYear,
+						bMonth,
+						bDay,
+						gender,
+					}}
+					validationSchema={registerValidation}
+					onSubmit={() => {
+						let current_date = new Date();
+						let picked_date = new Date(bYear, bMonth - 1, bDay);
+						let atleast14 = new Date(1970 + 14, 0, 1);
+						let noMoreThan70 = new Date(1970 + 70, 0, 1);
+						if (current_date - picked_date < atleast14) {
+							setDateError(
+								'it looks like you(ve enetered the wrong info.Please make sure that you use your real date of birth.'
+							);
+						} else if (current_date - picked_date > noMoreThan70) {
+							setDateError(
+								'it looks like you(ve enetered the wrong info.Please make sure that you use your real date of birth.'
+							);
+						} else if (gender === '') {
+							setDateError('');
+							setGenderError(
+								'Please choose a gender. You can change who can see this later.'
+							);
+						} else {
+							setDateError('');
+							setGenderError('');
+							registerSubmit();
+						}
+					}}
+				>
 					{(formik) => (
 						<Form className="register_form">
 							<div className="reg_line">
@@ -58,7 +164,7 @@ const RegisterForm = () => {
 								/>
 								<RegisterInput
 									type="text"
-									placeholder="Last name"
+									placeholder="Surname"
 									name="last_name"
 									onChange={handleRegisterChange}
 								/>
@@ -83,87 +189,40 @@ const RegisterForm = () => {
 								<div className="reg_line_header">
 									Date of birth <i className="info_icon"></i>
 								</div>
-								<div className="reg_grid">
-									<select name="bDay" onChange={handleRegisterChange}>
-										{days.map((day, index) => {
-											return (
-												<option value={day} key={index}>
-													{day}
-												</option>
-											);
-										})}
-									</select>
-									<select name="bMonth" onChange={handleRegisterChange}>
-										{months.map((month, index) => {
-											return (
-												<option value={month} key={index}>
-													{month}
-												</option>
-											);
-										})}
-									</select>
-									<select
-										name="bYear"
-										value={bYear}
-										onChange={handleRegisterChange}
-									>
-										{years.map((year, index) => {
-											return (
-												<option value={year} key={index}>
-													{year}
-												</option>
-											);
-										})}
-									</select>
-								</div>
+								<DateOfBirthSelect
+									bDay={bDay}
+									bMonth={bMonth}
+									bYear={bYear}
+									days={days}
+									months={months}
+									years={years}
+									handleRegisterChange={handleRegisterChange}
+									dateError={dateError}
+								/>
 							</div>
 							<div className="reg_col">
 								<div className="reg_line_header">
 									Gender <i className="info_icon"></i>
 								</div>
-								<div className="reg_grid">
-									<label htmlFor="male">
-										Male
-										<input
-											type="radio"
-											name="gender"
-											id="male"
-											value="male"
-											onChange={handleRegisterChange}
-										/>
-									</label>
-									<label htmlFor="female">
-										Female
-										<input
-											type="radio"
-											name="gender"
-											id="female"
-											value="female"
-											onChange={handleRegisterChange}
-										/>
-									</label>
-									<label htmlFor="custom">
-										Custom
-										<input
-											type="radio"
-											name="gender"
-											id="custom"
-											value="custom"
-											onChange={handleRegisterChange}
-										/>
-									</label>
-								</div>
+
+								<GenderSelect
+									handleRegisterChange={handleRegisterChange}
+									genderError={genderError}
+								/>
 							</div>
 							<div className="reg_infos">
-								People who use our service may have uploaded your contact
-								information to Facebook. Learn more. By clicking Sign Up, you
-								agree to our <span>Terms, Privacy Policy</span> and
-								<span> Cookies Policy.</span> You may receive SMS Notifications
-								from us and can opt out any time.
+								By clicking Sign Up, you agree to our{' '}
+								<span>Terms, Data Policy &nbsp;</span>
+								and <span>Cookie Policy.</span> You may receive SMS
+								notifications from us and can opt out at any time.
 							</div>
 							<div className="reg_btn_wrapper">
 								<button className="blue_btn open_signup">Sign Up</button>
 							</div>
+
+							<CircleLoader color="#1876f2" loading={loading} size={30} />
+							{error && <div className="error_text">{error}</div>}
+							{success && <div className="success_text">{success}</div>}
 						</Form>
 					)}
 				</Formik>
